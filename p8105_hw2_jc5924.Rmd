@@ -1,0 +1,176 @@
+---
+title: "p8105_hw2_jc5924"
+output: github_document
+name: Sophie Chen
+---
+
+```{r include=FALSE}
+library(tidyverse)
+library(readxl)
+```
+
+# Problem 1
+### NYC Transit data
+```{r data_cleaning}
+transit_data=
+  read_csv("data/NYC_Transit_Subway_Entrance_And_Exit_Data.csv",col_types = cols(Route8 = "c", Route9 = "c", Route10 = "c", Route11 = "c")) %>% 
+  janitor::clean_names() %>%
+  select(line:entry, vending, ada) %>%
+  mutate(entry=recode(entry,"YES"="TRUE","NO"="FALSE"))
+         
+transit_data
+```
+### Explaining the dataset
+* The dataset contains 19 variables which are `r names(transit_data)` and the demension of this dataset is `r nrow(transit_data)` rows * `r ncol(transit_data)` columns. I believe these data is not fairly tidy that after importing the file, we only clean the variable names to turn those into lower case with under dash connected, and we select the needed columns for this dataset. Lastly, we convert the entry variable from a character variable to a logical variable.
+
+### Answering questions
+* There are `r nrow(distinct(transit_data,station_name,line))` distinct stations.
+* There are 
+```{r}
+transit_data %>% 
+  filter(ada == TRUE) %>% 
+  select(station_name, line) %>% 
+distinct
+```
+stations that are ADA compliant.
+
+* The proportion of station entrances/exits without vending allow entrance is 
+```{r}
+transit_data %>% 
+  filter(vending == "NO") %>% 
+  pull(entry) %>% 
+  mean
+```
+
+### Reformatting route name and route number
+```{r}
+transit_data %>% 
+  pivot_longer(
+    route1:route11,
+    names_to = "route_num",
+    values_to = "route") %>% 
+  filter(route == "A") %>% 
+  select(station_name, line) %>% 
+  distinct
+
+transit_data %>% 
+  pivot_longer(
+    route1:route11,
+    names_to = "route_num",
+    values_to = "route") %>% 
+  filter(route == "A", ada == TRUE) %>% 
+  select(station_name, line) %>% 
+  distinct
+```
+
+# Problem 2
+### Read and clean Mr.Trash Wheel data
+```{r}
+mrtrashwheel_data=
+  readxl::read_excel("./data/Trash Wheel Collection Data.xlsx",
+                     sheet= "Mr. Trash Wheel",
+                     range="A2:N549") %>% 
+  janitor::clean_names() %>% 
+  drop_na(dumpster) %>% 
+  mutate(
+    sports_balls = as.integer(round(sports_balls)),
+    wheel_name = "Mr. Trash Wheel",
+    year=as.numeric(year))
+mrtrashwheel_data     
+```
+### Read and clean Professor Trash Wheel data
+```{r}
+proftrashwheel_data = 
+  readxl::read_excel("./data/Trash Wheel Collection Data.xlsx",
+                     sheet= "Professor Trash Wheel",
+                     range="A2:M96") %>% 
+  janitor::clean_names() %>% 
+  drop_na(dumpster) %>% 
+  mutate(sports_balls = NA,
+         wheel_name = "Professor Trash Wheel")
+proftrashwheel_data
+```
+### Combining the two sheets
+```{r}
+combinedtrashwheel_data=
+  full_join(mrtrashwheel_data,proftrashwheel_data) %>% 
+   janitor::clean_names()
+combinedtrashwheel_data
+```
+### A paragraph about the data
+* The above dataset is the two sheets combined together and there are total of `r nrow(combinedtrashwheel_data)` observations and `r ncol(combinedtrashwheel_data)` varibles in the combined dataset. Some variables are essential to notice that are weights of plastics, sports_balls, glass and trash bottle being collected over the years. We can select and filter the dataset and compare and contrast between Mr.Trash Wheel data and Professor Trash Wheel data.
+* The total weight of trash collected by Professor Trash Wheel is `r combinedtrashwheel_data %>%  filter(wheel_name=="Professor Trash Wheel") %>%  pull(weight_tons) %>% sum()` tons.
+* The total number of sports balls collected by Mr. Trash Wheel in 2020 is `r combinedtrashwheel_data %>% filter(wheel_name=="Mr. Trash Wheel", year==2020) %>% pull(sports_balls) %>% sum()`.
+
+# Problem 3
+### Clean pols-month data
+```{r}
+pols_data=
+  read_csv("./data/fivethirtyeight_datasets/pols-month.csv",show_col_types = FALSE) %>% 
+  janitor::clean_names() %>%
+  separate(mon, c("year", "month", "day")) %>% 
+  mutate(
+    month=month.name[as.numeric(month)],
+    year=as.integer(year),
+    president=case_when(prez_dem==1~"dem",
+                        prez_gop==1&2~"gop")) %>% 
+  select(-prez_dem,-prez_gop,-day) %>% 
+  arrange(year, month)
+pols_data
+```
+### Clean snp data
+```{r}
+snp_data=
+  read_csv("./data/fivethirtyeight_datasets/snp.csv",show_col_types = FALSE) %>% 
+  janitor::clean_names() %>%
+  separate(date,c("month", "day", "year")) %>%
+  mutate(
+    month = month.name[as.numeric(month)],
+    year = as.numeric(year), 
+    year = ifelse(year<16, year+2000, year+1900)) %>%
+  select(year, month, everything()) %>% 
+  select(-day) %>% 
+  arrange(year, month)
+snp_data        
+```
+### Tidy the unemployment data
+```{r}
+unemployment_data=
+  read_csv("./data/fivethirtyeight_datasets/unemployment.csv",show_col_types = FALSE) %>% 
+  janitor::clean_names() %>%
+  pivot_longer(
+    jan:dec,
+    names_to="month",
+    values_to="unemployment%") %>%
+  mutate(
+    month = recode(month, "jan" = "January", "feb" = "February", "mar" = "March", "apr" = "April", "may" = "May", "jun" = "June",  "jul" = "July", "aug" = "August", "sep" = "September", "oct" = "October", "nov" = "November", "dec" = "December" ),
+    year=as.numeric(year)) %>%
+  arrange(year, month) 
+unemployment_data
+```
+### Join the datasets by merging
+```{r}
+join_dataset=
+  left_join(pols_data,snp_data,by=c("year","month")) %>% 
+  left_join(unemployment_data,by=c("year","month"))
+join_dataset
+```
+### Short paragraph about datasets
+* There are `r nrow(pols_data)` observations and `r ncol(pols_data)` variables in the `pols_month` dataset. The essential variables are `r names(pols_data)`. The years went from `r pols_data %>% pull(year) %>% min` to `r pols_data %>% pull(year) %>% max` of nominations for domacratics and republicans. 
+
+* There are `r nrow(snp_data)` observations and `r ncol(snp_data)` variables in the `snp` dataset. The essential variables are `r names(snp_data)`. The years went from `r snp_data %>% pull(year) %>% min` to `r snp_data %>% pull(year) %>% max` for standard and poor stock market index number.
+
+* There are `r nrow(unemployment_data)` observations and `r ncol(unemployment_data)` variables in the `unemployment` dataset. The essential variables are `r names(unemployment_data)`. The years went from `r unemployment_data %>% pull(year) %>% min` to `r unemployment_data %>% pull(year) %>% max` for unemployment rate.
+
+* There are `r nrow(join_dataset)` observations and `r ncol(join_dataset)` variables in the `join_dataset`. The essential variables are `r names(join_dataset)`. The years went from `r join_dataset %>% pull(year) %>% min` to `r join_dataset %>% pull(year) %>% max` for all the data combined.
+
+
+
+
+
+
+
+
+
+
+
